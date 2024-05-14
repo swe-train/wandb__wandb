@@ -8,6 +8,8 @@ import os
 import sys
 from typing import Optional, Tuple
 
+from wandb.sdk import setup_debug
+
 if sys.version_info >= (3, 8):
     from typing import Literal
 else:
@@ -298,6 +300,8 @@ def _login(
             wandb.termwarn("Calling wandb.login() after wandb.init() has no effect.")
         return True
 
+    setup_debug.log("in login: before instantiating")
+
     wlogin = _WandbLogin()
 
     if _backend:
@@ -309,7 +313,10 @@ def _login(
     if _entity:
         wlogin.set_entity(_entity)
 
+    setup_debug.log("in login: after instantiating")
+
     # configure login object
+    setup_debug.log("in login: before setup")
     wlogin.setup(
         anonymous=anonymous,
         key=key,
@@ -318,6 +325,7 @@ def _login(
         force=force,
         timeout=timeout,
     )
+    setup_debug.log("in login: after setup")
 
     if wlogin._settings._offline:
         return False
@@ -328,15 +336,22 @@ def _login(
         return False
 
     # perform a login
+    setup_debug.log("in login: before checking if logged in")
     logged_in = wlogin.login()
+    setup_debug.log("in login: after checking if logged in")
 
     if key:
         wlogin.configure_api_key(key)
 
     if logged_in:
+        setup_debug.log("in login: was logged in, returning")
         return logged_in
 
+    setup_debug.log("in login: was not logged in")
+
     if not key:
+        setup_debug.log("in login: prompting for API key")
         wlogin.prompt_api_key()
+        setup_debug.log("in login: finished prompting for API key")
 
     return wlogin._key or False

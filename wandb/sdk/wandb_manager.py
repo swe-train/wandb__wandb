@@ -12,6 +12,7 @@ import psutil
 import wandb
 from wandb import env, trigger
 from wandb.errors import Error
+from wandb.sdk import setup_debug
 from wandb.sdk.lib.exit_hooks import ExitHooks
 from wandb.sdk.lib.import_hooks import unregister_all_post_import_hooks
 
@@ -133,22 +134,32 @@ class _Manager:
         self._atexit_lambda = None
         self._hooks = None
 
+        setup_debug.log("in Manager, before creating Service")
         self._service = service._Service(settings=self._settings)
+        setup_debug.log("in Manager, after creating Service")
+
         token = _ManagerToken.from_environment()
         if not token:
+            setup_debug.log("in Manager, before starting service")
             self._service.start()
+            setup_debug.log("in Manager, after starting service")
             host = "localhost"
             transport = "tcp"
             port = self._service.sock_port
             assert port
             token = _ManagerToken.from_params(transport=transport, host=host, port=port)
             token.set_environment()
+            setup_debug.log(f"in Manager, token is {token.token}")
             self._atexit_setup()
 
         self._token = token
 
         try:
+            setup_debug.log(
+                f"in Manager, before connecting to service (token={token.token})"
+            )
             self._service_connect()
+            setup_debug.log("in Manager, after connecting to service")
         except ManagerConnectionError as e:
             wandb._sentry.reraise(e)
 

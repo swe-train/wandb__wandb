@@ -24,6 +24,7 @@ from wandb.errors import CommError, Error, UsageError
 from wandb.errors.util import ProtobufErrorHandler
 from wandb.integration import sagemaker
 from wandb.integration.magic import magic_install
+from wandb.sdk import setup_debug
 from wandb.sdk.lib import runid
 from wandb.sdk.lib.paths import StrPath
 from wandb.util import _is_artifact_representation
@@ -186,10 +187,14 @@ class _WandbInit:
         _disable_service = mode == "disabled" or settings_mode == "disabled"
         setup_settings = {"_disable_service": _disable_service}
 
+        setup_debug.log("before first wandb_setup.setup()")
+
         self._wl = wandb_setup.setup(settings=setup_settings)
         # Make sure we have a logger setup (might be an early logger)
         assert self._wl is not None
         _set_logger(self._wl._get_logger())
+
+        setup_debug.log("after first wandb_setup.setup()")
 
         # Start with settings from wandb library singleton
         settings: Settings = self._wl.settings.copy()
@@ -242,11 +247,13 @@ class _WandbInit:
             if kwargs.get(deprecated_kwarg):
                 self.deprecated_features_used[deprecated_kwarg] = msg
 
+        setup_debug.log("before parse_config()")
         init_config = parse_config(
             init_config,
             include=kwargs.pop("config_include_keys", None),
             exclude=kwargs.pop("config_exclude_keys", None),
         )
+        setup_debug.log("after parse_config()")
 
         # merge config with sweep or sagemaker (or config file)
         self.sweep_config = dict()
@@ -297,6 +304,7 @@ class _WandbInit:
             settings.update(init_settings, source=Source.INIT)
 
         if not settings._offline and not settings._noop:
+            setup_debug.log("before _login()")
             wandb_login._login(
                 anonymous=kwargs.pop("anonymous", None),
                 force=kwargs.pop("force", None),
@@ -304,11 +312,17 @@ class _WandbInit:
                 _silent=settings.quiet or settings.silent,
                 _entity=kwargs.get("entity") or settings.entity,
             )
+            setup_debug.log("after _login()")
+
+        setup_debug.log("before second setup()")
 
         # apply updated global state after login was handled
         wl = wandb.setup()
         assert wl is not None
+
+        setup_debug.log("after second setup()")
         settings._apply_settings(wl.settings)
+        setup_debug.log("after applying settings after second setup()")
 
         # get status of code saving before applying user settings
         save_code_pre_user_settings = settings.save_code
@@ -326,14 +340,21 @@ class _WandbInit:
         # TODO(jhr): should this be moved? probably.
         settings._set_run_start_time(source=Source.INIT)
 
+        setup_debug.log("before setting up logs (unless noop)")
+
         if not settings._noop:
             self._log_setup(settings)
 
             if settings._jupyter:
                 self._jupyter_setup(settings)
+
+        setup_debug.log("after setting up logs (unless noop), before launch stuff")
+
         launch_config = _handle_launch_config(settings)
         if launch_config:
             self._split_artifacts_from_config(launch_config, self.launch_config)
+
+        setup_debug.log("after launch stuff")
 
         self.settings = settings
 
@@ -1159,6 +1180,7 @@ def init(
         raise ValueError("Cannot specify both `fork_from` and `resume`")
 
     try:
+        setup_debug.log("starting")
         wi = _WandbInit()
         wi.setup(kwargs)
         return wi.init()
